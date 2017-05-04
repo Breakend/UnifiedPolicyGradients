@@ -189,7 +189,7 @@ class DDPG(RLAlgorithm):
                 on_policy_action = self.get_action_on_policy(self.env, on_policy_observation, policy=sample_policy)
                 next_observation, reward, terminal, _ = self.env.step(action)
 
-                on_policy_next_observation, on_policy_reward, on_policy_terminal, _ = self.env.step(action)
+                on_policy_next_observation, on_policy_reward, on_policy_terminal, _ = self.env.step(on_policy_action)
 
 
                 path_length += 1
@@ -336,8 +336,6 @@ class DDPG(RLAlgorithm):
         next_qvals = target_qf.get_qval(next_obs, next_actions)
 
         ys = rewards + (1. - terminals) * self.discount * next_qvals.reshape(-1)
-        # import pdb; pdb.set_trace()
-        # ys= ys.reshape(-1, 1)
 
         f_train_qf = self.opt_info["f_train_qf"]
         f_train_policy = self.opt_info["f_train_policy"]
