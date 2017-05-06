@@ -6,14 +6,14 @@ from rllab.sampler import parallel_sampler
 from rllab.plotter import plotter
 from functools import partial
 import rllab.misc.logger as logger
-
-from rllab.core.serializable import Serializable
-
+import pickle as pickle
 import numpy as np
 import pyprind
+from rllab.core.serializable import Serializable
 from sandbox.rocky.tf.misc import tensor_utils
 import tensorflow as tf
 from sampling_utils import *
+from sandbox.rocky.tf.core.network import MLP
 
 def parse_update_method(update_method, **kwargs):
     if update_method == 'adam':
@@ -156,13 +156,12 @@ class DDPG(RLAlgorithm):
         sess.run(tf.global_variables_initializer())
         self.start_worker()
         self.init_opt()
-
         itr = 0
         path_length = 0
         path_return = 0
         terminal = False
-        on_policy_terminal = False
         initial = False
+        on_policy_terminal = False
         observation = self.env.reset()
         on_policy_observation = self.env.reset()
 
@@ -220,11 +219,7 @@ class DDPG(RLAlgorithm):
                         batch = pool.random_batch(self.batch_size)
                         on_policy_batch = pool_on_policy.random_batch(self.batch_size)
 
-                        sigma = np.random.randint(0,2)
-                        if sigma == 0:
-                            self.do_training(itr, batch)
-                        else:
-                            self.do_training(itr, on_policy_batch)
+                        self.do_training(itr, on_policy_batch, batch)
 
                     sample_policy.set_param_values(self.policy.get_param_values())
 
@@ -262,6 +257,12 @@ class DDPG(RLAlgorithm):
             extra_dims=1,
         )
 
+        # y need to be computed first
+        obs_offpolicy = self.env.observation_space.new_tensor_variable(
+            'obs_offpolicy',
+            extra_dims=1,
+        )
+
         # The yi values are computed separately as above and then passed to
         # the training functions below
         action = self.env.action_space.new_tensor_variable(
@@ -269,10 +270,12 @@ class DDPG(RLAlgorithm):
             extra_dims=1,
         )
 
+        action_offpolicy = self.env.action_space.new_tensor_variable(
+            'action_offpolicy',
+            extra_dims=1,
+        )
 
-        # yvar = TT.vector('ys')
 
-                # policy dist?
         yvar = tensor_utils.new_tensor(
             'ys',
             ndim=1,
@@ -280,14 +283,35 @@ class DDPG(RLAlgorithm):
         )
 
 
+        yvar_offpolicy = tensor_utils.new_tensor(
+            'ys_offpolicy',
+            ndim=1,
+            dtype=tf.float32,
+        )
+
+        input_to_gates= tf.concat([obs, obs_offpolicy], axis=1)
+
+        assert input_to_gates.get_shape().as_list()[-1] == obs.get_shape().as_list()[-1] +  obs_offpolicy.get_shape().as_list()[-1]
+
+        # TODO: right now this is a soft-gate, should make a hard-gate (options vs mixtures)
+        gating_func = MLP(name="sigma_gate",
+                          output_dim=1,
+                          hidden_sizes=(32,32),
+                          hidden_nonlinearity=tf.nn.relu,
+                          output_nonlinearity=tf.nn.sigmoid,
+                          input_var=input_to_gates,
+                          input_shape=tuple(input_to_gates.get_shape().as_list()[1:])).output
+
         qf_weight_decay_term = 0.5 * self.qf_weight_decay * \
                                sum([tf.reduce_sum(tf.square(param)) for param in
                                     self.qf.get_params(regularizable=True)])
 
         qval = self.qf.get_qval_sym(obs, action)
+        qval_off = self.qf.get_qval_sym(obs_offpolicy, action_offpolicy)
 
         qf_loss = tf.reduce_mean(tf.square(yvar - qval))
-        qf_reg_loss = qf_loss + qf_weight_decay_term
+        qf_loss_off = tf.reduce_mean(tf.square(yvar_offpolicy - qval_off))
+        qf_reg_loss = qf_loss*gating_func + qf_loss_off * (1-gating_func) + qf_weight_decay_term
 
         policy_weight_decay_term = 0.5 * self.policy_weight_decay * \
                                    sum([tf.reduce_sum(tf.square(param))
@@ -299,21 +323,27 @@ class DDPG(RLAlgorithm):
             deterministic=True
         )
 
+        policy_qval_off = self.qf.get_qval_sym(
+            obs_offpolicy, self.policy.get_action_sym(obs_offpolicy),
+            deterministic=True
+        )
 
         policy_surr = -tf.reduce_mean(policy_qval)
+        policy_surr_off = -tf.reduce_mean(policy_qval_off)
 
-        policy_reg_surr = policy_surr + policy_weight_decay_term
+        policy_reg_surr = policy_surr*gating_func + policy_surr_off*(1-gating_func) + policy_weight_decay_term
 
         qf_updates = self.policy_update_method.minimize(qf_reg_loss, var_list= self.qf.get_params(trainable=True))
+
         policy_updates = self.policy_update_method.minimize(policy_reg_surr, var_list=self.policy.get_params(trainable=True))
 
         f_train_qf = tensor_utils.compile_function(
-            inputs=[yvar, obs, action],
+            inputs=[yvar, obs, action, yvar_offpolicy, obs_offpolicy, action_offpolicy],
             outputs=[qf_loss, qval, qf_updates],
         )
 
         f_train_policy = tensor_utils.compile_function(
-            inputs=[obs],
+            inputs=[obs, obs_offpolicy],
             outputs=[policy_surr, policy_updates],
         )
 
@@ -325,13 +355,20 @@ class DDPG(RLAlgorithm):
         )
 
 
-    def do_training(self, itr, batch):
+    def do_training(self, itr, onpolicy_batch, offpolicy_batch):
 
         obs, actions, rewards, next_obs, terminals = ext.extract(
-            batch,
+            onpolicy_batch,
             "observations", "actions", "rewards", "next_observations",
             "terminals"
         )
+
+        obs_off, actions_off, rewards_off, next_obs_off, terminals_off = ext.extract(
+            offpolicy_batch,
+            "observations", "actions", "rewards", "next_observations",
+            "terminals"
+        )
+
 
         # compute the on-policy y values
         target_qf = self.opt_info["target_qf"]
@@ -342,12 +379,17 @@ class DDPG(RLAlgorithm):
 
         ys = rewards + (1. - terminals) * self.discount * next_qvals.reshape(-1)
 
+        next_actions_off, _ = target_policy.get_actions(next_obs_off)
+        next_qvals_off = target_qf.get_qval(next_obs_off, next_actions_off)
+
+        ys_off = rewards + (1. - terminals_off) * self.discount * next_qvals_off.reshape(-1)
+
         f_train_qf = self.opt_info["f_train_qf"]
         f_train_policy = self.opt_info["f_train_policy"]
 
-        qf_loss, qval, _ = f_train_qf(ys, obs, actions)
+        qf_loss, qval, _ = f_train_qf(ys, obs, actions, ys_off, obs_off, actions_off)
 
-        policy_surr, _ = f_train_policy(obs)
+        policy_surr, _ = f_train_policy(obs, obs_off)
 
         target_policy.set_param_values(
             target_policy.get_param_values() * (1.0 - self.soft_target_tau) +

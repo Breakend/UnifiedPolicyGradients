@@ -1,3 +1,4 @@
+from unifying_policy_gradient.ddpg_unified_gated import DDPG as GatedDDPG
 from unifying_policy_gradient.ddpg_unified import DDPG
 from rllab.envs.box2d.cartpole_env import CartpoleEnv
 from rllab.envs.normalized_env import normalize
@@ -9,6 +10,14 @@ from sandbox.rocky.tf.q_functions.continuous_mlp_q_function import ContinuousMLP
 from sandbox.rocky.tf.envs.base import TfEnv
 from rllab.envs.gym_env import GymEnv
 import pickle
+import tensorflow as tf
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--num_epochs", default=100, type=int)
+parser.add_argument("--plot", action="store_true")
+parser.add_argument("--use_gated", action="store_true")
+args = parser.parse_args()
 
 stub(globals())
 
@@ -21,13 +30,18 @@ policy = DeterministicMLPPolicy(
     hidden_sizes=(32, 32)
 )
 
-test = pickle.loads(pickle.dumps(policy))
-
 es = OUStrategy(env_spec=env.spec)
 
 qf = ContinuousMLPQFunction(env_spec=env.spec)
 
-algo = DDPG(
+if args.use_gated:
+    ddpg_class = GatedDDPG
+else:
+    ddpg_class = DDPG
+
+
+
+algo = ddpg_class(
     env=env,
     policy=policy,
     es=es,
@@ -36,18 +50,19 @@ algo = DDPG(
     max_path_length=100,
     epoch_length=1000,
     min_pool_size=10000,
-    n_epochs=1000,
+    n_epochs=args.num_epochs,
     discount=0.99,
     scale_reward=0.01,
     qf_learning_rate=1e-3,
     policy_learning_rate=1e-4,
     # Uncomment both lines (this and the plot parameter below) to enable plotting
-    # plot=True,
+    plot=args.plot,
 )
 
 
 run_experiment_lite(
     algo.train(),
+    log_dir='./data/',
     # Number of parallel workers for sampling
     n_parallel=1,
     # Only keep the snapshot parameters for the last iteration
@@ -56,5 +71,5 @@ run_experiment_lite(
     # will be used
     exp_name="Unified_DDPG_CartPole",
     seed=1,
-    # plot=True,
+    plot=args.plot,
 )
