@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_epochs", default=100, type=int)
 parser.add_argument("--plot", action="store_true")
 parser.add_argument("--use_gated", action="store_true")
+parser.add_argument("--data_dir", default="./data/")
 args = parser.parse_args()
 
 stub(globals())
@@ -62,7 +63,7 @@ algo = ddpg_class(
 
 run_experiment_lite(
     algo.train(),
-    log_dir='./data/',
+    log_dir=args.data_dir,
     # Number of parallel workers for sampling
     n_parallel=1,
     # Only keep the snapshot parameters for the last iteration
