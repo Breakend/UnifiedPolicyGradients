@@ -1,5 +1,6 @@
 from unifying_policy_gradient.ddpg_unified_gated import DDPG as GatedDDPG
 from unifying_policy_gradient.ddpg_unified import DDPG
+from unifying_policy_gradient.ddpg import DDPG as RegularDDPG
 from rllab.envs.box2d.cartpole_env import CartpoleEnv
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import stub, run_experiment_lite
@@ -9,20 +10,36 @@ from sandbox.rocky.tf.q_functions.continuous_mlp_q_function import ContinuousMLP
 
 from sandbox.rocky.tf.envs.base import TfEnv
 from rllab.envs.gym_env import GymEnv
+from rllab.misc import ext
 import pickle
 import tensorflow as tf
 
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument("type", help="Type of DDPG to run: unified, unified-gated, regular")
+parser.add_argument("env", help="The environment name from OpenAIGym environments")
 parser.add_argument("--num_epochs", default=100, type=int)
 parser.add_argument("--plot", action="store_true")
-parser.add_argument("--use_gated", action="store_true")
 parser.add_argument("--data_dir", default="./data/")
 args = parser.parse_args()
 
 stub(globals())
+ext.set_seed(10)
 
-env = TfEnv(normalize(CartpoleEnv()))
+supported_gym_envs = ["MountainCarContinuous-v0", "Hopper-v1", "Walker2d-v1", "Humanoid-v1"]
+
+other_env_class_map  = { "Cartpole" :  CartpoleEnv}
+
+if args.env in supported_gym_envs:
+    gymenv = GymEnv(args.env, force_reset=True, record_video=False, record_log=False)
+    # gymenv.env.seed(1)
+else:
+    gymenv = other_env_class_map[args.env]()
+
+#TODO: assert continuous space
+
+
+env = TfEnv(normalize(gymenv))
 
 policy = DeterministicMLPPolicy(
     env_spec=env.spec,
@@ -35,11 +52,11 @@ es = OUStrategy(env_spec=env.spec)
 
 qf = ContinuousMLPQFunction(env_spec=env.spec)
 
-if args.use_gated:
-    ddpg_class = GatedDDPG
-else:
-    ddpg_class = DDPG
 
+ddpg_type_map = {"unified" : DDPG, "unified-gated" : GatedDDPG, "regular" : RegularDDPG}
+
+
+ddpg_class = ddpg_type_map[args.type]
 
 
 algo = ddpg_class(

@@ -203,9 +203,11 @@ class DDPG(RLAlgorithm):
 
                 if not terminal and path_length >= self.max_path_length:
                     terminal = True
+                    on_policy_terminal = True
                     # only include the terminal transition in this case if the flag was set
                     if self.include_horizon_terminal_transitions:
                         pool.add_sample(observation, action, reward * self.scale_reward, terminal, initial)
+                        pool_on_policy.add_sample(on_policy_next_observation, on_policy_action, on_policy_reward*self.scale_reward, on_policy_terminal, initial)
 
                 else:
                     pool.add_sample(observation, action, reward * self.scale_reward, terminal, initial)

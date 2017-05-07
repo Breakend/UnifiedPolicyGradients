@@ -90,3 +90,7 @@ ENV/
 
 data/
 *.png
+binomial/
+gated/
+regular/
+unifying_policy_gradient/__pycache__/
