@@ -27,7 +27,7 @@ args = parser.parse_args()
 stub(globals())
 ext.set_seed(1)
 
-supported_gym_envs = ["MountainCarContinuous-v0", "Hopper-v1", "Walker2d-v1", "Humanoid-v1"]
+supported_gym_envs = ["MountainCarContinuous-v0", "Hopper-v1", "Walker2d-v1", "Humanoid-v1", "Reacher-v1", "HalfCheetah-v1", "Swimmer-v1", "HumanoidStandup-v1"]
 
 other_env_class_map  = { "Cartpole" :  CartpoleEnv}
 
