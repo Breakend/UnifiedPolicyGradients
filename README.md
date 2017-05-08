@@ -6,10 +6,11 @@ setup rllab following the directions:
 
 https://github.com/openai/rllab
 
-
+<code>
 $ export PYTHONPATH=~/path/to/rllab/:$PYTHONPATH
 
 $ source activate rllab3
+</code>
 
 ## for unified gated
 
