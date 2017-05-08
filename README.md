@@ -2,15 +2,20 @@
 
 Running
 
-setup rllab following the directions, right now you need my fork until the pull request gets merged in:
+setup rllab following the directions:
 
-https://github.com/Breakend/rllab
-
-**make sure this points to my fork**
-export PYTHONPATH=~/path/to/rllab/:$PYTHONPATH
+https://github.com/openai/rllab
 
 
-source activate rllab3
+$ export PYTHONPATH=~/path/to/rllab/:$PYTHONPATH
 
+$ source activate rllab3
 
-python run_unified_ddpg.py
+## for unified gated
+
+python run_ddpg_variations.py unified-gated Hopper-v1 --num_epochs 1000 --data_dir ./gated/
+
+## for baseline ddpg
+
+python run_ddpg_variations.py regular Hopper-v1 --num_epochs 1000 --data_dir ./gated/
+
