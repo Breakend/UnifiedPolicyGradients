@@ -17,7 +17,7 @@ from rllab.core.serializable import Serializable
 from sampling_utils import SimpleReplayPool
 import pickle as pickle
 from numpy import linalg as LA
-import random 
+import random
 from random import randint
 
 
@@ -31,10 +31,10 @@ class Persistence_Length_Exploration(RLAlgorithm):
             env,
             policy,
             qf,
-            L_p=0.08, 
-            b_step_size=0.0004, 
-            sigma = 0.1, 
-            max_exploratory_steps = 20,  
+            L_p=0.08,
+            b_step_size=0.0004,
+            sigma = 0.1,
+            max_exploratory_steps = 20,
             batch_size=32,
             n_epochs=200,
             epoch_length=1000,
@@ -149,7 +149,6 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
     @overrides
     def lp_exploration(self):
-
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             # This seems like a rather sequential method
@@ -192,7 +191,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
             H = ( self.b_step_size / LA.norm(H_vector) ) * H_vector
 
             all_H = np.array([H])
-            all_theta = np.array([])            
+            all_theta = np.array([])
 
 
             last_action_chosen = self.initial_action
@@ -214,7 +213,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
 
                 for epoch_itr in pyprind.prog_bar(range(self.epoch_length)):
- 
+
                     if self.env.action_space.shape[0] == 6:
                         one_vector = self.one_vector_6D()
 
@@ -242,7 +241,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
                     elif self.env.action_space.shape[0] ==6:
                         H_conversion = self.cart2pol_6D(H)
                     elif self.env.action_space.shape[0] ==10:
-                        H_conversion = self.cart2pol_10D(H)                 
+                        H_conversion = self.cart2pol_10D(H)
                     elif self.env.action_space.shape[0] ==21:
                         H_conversion = self.cart2pol_21D(H)
 
@@ -255,7 +254,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
                     if self.env.action_space.shape[0] == 3:
                         H_conversion = self.pol2cart_3D(H)
                     elif self.env.action_space.shape[0] ==6:
-                        H_conversion = self.pol2cart_6D(H) 
+                        H_conversion = self.pol2cart_6D(H)
                     elif self.env.action_space.shape[0] ==10:
                         H_conversion = self.pol2cart_10D(H)
                     elif self.env.action_space.shape[0] ==21:
@@ -292,7 +291,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
                     chosen_state, reward, terminal, _ = self.env.step(chosen_action)
 
-                    chain_states = np.append(chain_states, np.array([chosen_state]), axis=0)    
+                    chain_states = np.append(chain_states, np.array([chosen_state]), axis=0)
 
                     action = chosen_action
                     state = chosen_state
@@ -302,7 +301,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
                     #updates to be used in next iteration
                     H = phi_t_1 - phi_t
                     all_H = np.append(all_H, np.array([H]), axis=0)
-                    next_action = phi_t_1                    
+                    next_action = phi_t_1
 
 
                     path_length += 1
@@ -311,7 +310,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
                     if not terminal and path_length >= self.max_path_length:
                         terminal = True
- 
+
                         #originally, it was only line above
                         #added these below
                         terminal_state = chosen_state
@@ -338,7 +337,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
                         for update_itr in range(self.n_updates_per_sample):
                             # Train policy
                             batch = pool.random_batch(self.batch_size)
-                            itrs, updated_q_network, updated_policy_network = self.do_training(itr, batch)
+                            itrs = self.do_training(itr, batch)
 
                             train_qf_itr += itrs[0]
                             train_policy_itr += itrs[1]
@@ -357,18 +356,18 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
 
             self.env.terminate()
-            self.policy.terminate()      
+            self.policy.terminate()
 
-            return updated_q_network, updated_policy_network, action_trajectory_chain, state_trajectory_chain, end_trajectory_action, end_trajectory_state
+            return self.qf, self.policy, action_trajectory_chain, state_trajectory_chain, end_trajectory_action, end_trajectory_state
 
 
 
     def init_opt(self):
 
         # First, create "target" policy and Q functions
-        with tf.variable_scope("target_policy"):
+        with tf.variable_scope("target_policy", reuse=True):
             target_policy = Serializable.clone(self.policy)
-        with tf.variable_scope("target_qf"):
+        with tf.variable_scope("target_qf", reuse=True):
             target_qf = Serializable.clone(self.qf)
 
         # target_policy = pickle.loads(pickle.dumps(self.policy))
@@ -477,11 +476,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
             self.train_policy_itr -= 1
             train_policy_itr += 1
 
-        q_network_exploratory_update = self.qf
-        policy_network_exploratory_update = self.policy
-
-
-        return 1, train_policy_itr, q_network_exploratory_update, policy_network_exploratory_update # number of itrs qf, policy are trained
+        return 1, train_policy_itr
 
     def evaluate(self, epoch, pool):
         logger.log("Collecting samples for evaluation")
@@ -585,7 +580,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
         one_vector = np.array([one_vec_x1, one_vec_x2])
 
-        return one_vector 
+        return one_vector
 
 
     def one_vector_6D(self):
@@ -654,7 +649,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
         # if one_vec_x10 == 0:
         #     one_vec_x10 = 1
 
-        
+
         one_vector = np.array([one_vec_x1, one_vec_x2, one_vec_x3, one_vec_x4, one_vec_x5, one_vec_x6, one_vec_x7, one_vec_x8, one_vec_x9])
 
         return one_vector
@@ -728,7 +723,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
         one_vec_x17 = random.randint(-1, 0)
         if one_vec_x17 == 0:
-            one_vec_x17 = 1       
+            one_vec_x17 = 1
 
         one_vec_x18 = random.randint(-1, 0)
         if one_vec_x18 == 0:
@@ -741,7 +736,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
         one_vec_x20 = random.randint(-1, 0)
         if one_vec_x20 == 0:
             one_vec_x20 = 1
-        
+
         one_vector = np.array([one_vec_x1, one_vec_x2, one_vec_x3, one_vec_x4, one_vec_x5, one_vec_x6, one_vec_x7, one_vec_x8, one_vec_x9, one_vec_x10, one_vec_x11, one_vec_x12, one_vec_x13, one_vec_x14, one_vec_x15, one_vec_x16, one_vec_x17, one_vec_x18, one_vec_x19, one_vec_x20 ])
 
         return one_vector
@@ -784,7 +779,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
         x_3 = cartesian[2]
 
 
-        modulus = x_1**2 + x_2**2 + x_3**2 
+        modulus = x_1**2 + x_2**2 + x_3**2
 
         radius = np.sqrt(modulus)
         phi_1 = np.arccos(x_1 / radius)
@@ -810,7 +805,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
         x_10 = cartesian[9]
 
 
-        modulus = x_1**2 + x_2**2 + x_3**2  + x_4**2 + x_5**2 + x_6**2 + x_7**2 + x_8**2 + x_9**2 + x_10**2 
+        modulus = x_1**2 + x_2**2 + x_3**2  + x_4**2 + x_5**2 + x_6**2 + x_7**2 + x_8**2 + x_9**2 + x_10**2
 
         radius = np.sqrt(modulus)
         phi_1 = np.arccos(x_1 / radius)
@@ -825,9 +820,9 @@ class Persistence_Length_Exploration(RLAlgorithm):
         phi_8 = np.arccos(x_8 / ( np.sqrt(x_10**2 + x_9**2  + x_8**2) ) )
 
         if x_10 >= 0:
-            phi_9 = np.arccos( x_9 / (  np.sqrt(x_10**2 + x_9**2)   ) ) 
+            phi_9 = np.arccos( x_9 / (  np.sqrt(x_10**2 + x_9**2)   ) )
         else:
-            phi_9 = (2 * np.pi) - np.arccos( x_9 / (  np.sqrt(x_10**2 + x_9**2)   ) ) 
+            phi_9 = (2 * np.pi) - np.arccos( x_9 / (  np.sqrt(x_10**2 + x_9**2)   ) )
 
         spherical = np.array([radius, phi_1, phi_2, phi_3, phi_4, phi_5, phi_6, phi_7, phi_8, phi_9])
 
@@ -879,16 +874,16 @@ class Persistence_Length_Exploration(RLAlgorithm):
         phi_14 = np.arccos(x_14 / radius)
         phi_15 = np.arccos(x_15 / radius)
         phi_16 = np.arccos(x_16 / radius)
-        phi_17 = np.arccos(x_17 / radius)                
+        phi_17 = np.arccos(x_17 / radius)
         phi_18 = np.arccos(x_18 / radius)
 
 
         phi_19 = np.arccos(x_19 / ( np.sqrt(x_21**2 + x_20**2  + x_19**2) ) )
 
         if x_21 >= 0:
-            phi_20 = np.arccos( x_20 / (  np.sqrt(x_21**2 + x_20**2)   ) ) 
+            phi_20 = np.arccos( x_20 / (  np.sqrt(x_21**2 + x_20**2)   ) )
         else:
-            phi_20 = (2 * np.pi) - np.arccos( x_20 / (  np.sqrt(x_21**2 + x_20**2)   ) ) 
+            phi_20 = (2 * np.pi) - np.arccos( x_20 / (  np.sqrt(x_21**2 + x_20**2)   ) )
 
         spherical = np.array([radius, phi_1, phi_2, phi_3, phi_4, phi_5, phi_6, phi_7, phi_8, phi_9, phi_10, phi_11, phi_12, phi_13, phi_14, phi_15, phi_16, phi_17, phi_18, phi_19, phi_20])
 
@@ -929,7 +924,7 @@ class Persistence_Length_Exploration(RLAlgorithm):
 
         x_1 = radius * np.cos(phi_1)
         x_2 = radius * np.sin(phi_1) * np.cos(phi_2)
-        x_3 = radius * np.sin(phi_1) * np.sin(phi_2) 
+        x_3 = radius * np.sin(phi_1) * np.sin(phi_2)
 
         cartesian = np.array([x_1, x_2, x_3])
 
@@ -1023,14 +1018,10 @@ class Persistence_Length_Exploration(RLAlgorithm):
         x_18 = radius * np.sin(phi_1) * np.sin(phi_2) * np.sin(phi_3) * np.sin(phi_4) * np.sin(phi_5) * np.sin(phi_6) * np.sin(phi_7) *  np.sin(phi_8) * np.sin(phi_9) * np.sin(phi_10) * np.sin(phi_11) * np.sin(phi_12) * np.sin(phi_13) * np.sin(phi_14) * np.sin(phi_15) * np.sin(phi_16) * np.sin(phi_17) * np.cos(phi_18)
         x_19 = radius * np.sin(phi_1) * np.sin(phi_2) * np.sin(phi_3) * np.sin(phi_4) * np.sin(phi_5) * np.sin(phi_6) * np.sin(phi_7) *  np.sin(phi_8) * np.sin(phi_9) * np.sin(phi_10) * np.sin(phi_11) * np.sin(phi_12) * np.sin(phi_13) * np.sin(phi_14) * np.sin(phi_15) * np.sin(phi_16) * np.sin(phi_17) * np.sin(phi_18) * np.cos(phi_19)
         x_20 = radius * np.sin(phi_1) * np.sin(phi_2) * np.sin(phi_3) * np.sin(phi_4) * np.sin(phi_5) * np.sin(phi_6) * np.sin(phi_7) *  np.sin(phi_8) * np.sin(phi_9) * np.sin(phi_10) * np.sin(phi_11) * np.sin(phi_12) * np.sin(phi_13) * np.sin(phi_14) * np.sin(phi_15) * np.sin(phi_16) * np.sin(phi_17) * np.sin(phi_18) * np.sin(phi_19) * np.cos(phi_20)
-        x_21 = radius * np.sin(phi_1) * np.sin(phi_2) * np.sin(phi_3) * np.sin(phi_4) * np.sin(phi_5) * np.sin(phi_6) * np.sin(phi_7) *  np.sin(phi_8) * np.sin(phi_9) * np.sin(phi_10) * np.sin(phi_11) * np.sin(phi_12) * np.sin(phi_13) * np.sin(phi_14) * np.sin(phi_15) * np.sin(phi_16) * np.sin(phi_17) * np.sin(phi_18) * np.sin(phi_19) * np.sin(phi_20) 
+        x_21 = radius * np.sin(phi_1) * np.sin(phi_2) * np.sin(phi_3) * np.sin(phi_4) * np.sin(phi_5) * np.sin(phi_6) * np.sin(phi_7) *  np.sin(phi_8) * np.sin(phi_9) * np.sin(phi_10) * np.sin(phi_11) * np.sin(phi_12) * np.sin(phi_13) * np.sin(phi_14) * np.sin(phi_15) * np.sin(phi_16) * np.sin(phi_17) * np.sin(phi_18) * np.sin(phi_19) * np.sin(phi_20)
 
 
 
         cartesian = np.array([x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8, x_9, x_10, x_11, x_12, x_13, x_14, x_15, x_16, x_17, x_18, x_19, x_20, x_21 ])
 
         return cartesian
-
-
-
-

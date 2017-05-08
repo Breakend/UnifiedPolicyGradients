@@ -156,9 +156,6 @@ class DDPG(RLAlgorithm):
             initial = False
             observation = self.env.reset()
 
-            #with tf.variable_scope("sample_policy"):
-                #with suppress_params_loading():
-                #sample_policy = pickle.loads(pickle.dumps(self.policy))
             with tf.variable_scope("sample_policy"):
                 sample_policy = Serializable.clone(self.policy)
 
@@ -168,11 +165,13 @@ class DDPG(RLAlgorithm):
                 train_qf_itr, train_policy_itr = 0, 0
 
                 updated_q_network, updated_policy_network, _, _, end_trajectory_action, end_trajectory_state = self.lp.lp_exploration()
-                self.qf = updated_q_network
-                self.policy = updated_policy_network
+
+                # Don't need to set the values because we're actually using the same policy/qf already
+                # self.qf.set_param_values(updated_q_network.get_param_values())
+                # self.policy.set_param_values(updated_policy_network.get_param_values())
 
                 observation = end_trajectory_state
-            
+
                 for epoch_itr in pyprind.prog_bar(range(self.epoch_length)):
                     # Execute policy
                     if terminal:  # or path_length > self.max_path_length:

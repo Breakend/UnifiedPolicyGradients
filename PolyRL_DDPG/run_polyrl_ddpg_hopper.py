@@ -66,20 +66,21 @@ steps_per_episode = 1000
 """
 Persistence Length Exploration
 """
-lp = Persistence_Length_Exploration(
-    env=env, 
-    qf=qf, 
-    policy=policy,
-    L_p=0.2,
-    b_step_size=0.0004, 
-    sigma = 0.1,
-    max_exploratory_steps = max_exploratory_steps_iters,
-    batch_size=batch_size_value,
-    n_epochs=args.num_epochs,
-    scale_reward=1.0,
-    qf_learning_rate=1e-3,
-    policy_learning_rate=1e-4,
-)
+with tf.variable_scope("lp"):
+    lp = Persistence_Length_Exploration(
+        env=env,
+        qf=qf,
+        policy=policy,
+        L_p=0.2,
+        b_step_size=0.0004,
+        sigma = 0.1,
+        max_exploratory_steps = max_exploratory_steps_iters,
+        batch_size=batch_size_value,
+        n_epochs=args.num_epochs,
+        scale_reward=1.0,
+        qf_learning_rate=1e-3,
+        policy_learning_rate=1e-4,
+    )
 
 
 ddpg_type_map = {"regular" : DDPG}

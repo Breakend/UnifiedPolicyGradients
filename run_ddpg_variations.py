@@ -22,6 +22,7 @@ parser.add_argument("env", help="The environment name from OpenAIGym environment
 parser.add_argument("--num_epochs", default=100, type=int)
 parser.add_argument("--data_dir", default="./data/")
 parser.add_argument("--use_ec2", action="store_true", help="Use your ec2 instances if configured")
+parser.add_argument("--dont_terminate_machine", action="store_false", help="Whether to terminate your spot instance or not. Be careful.")
 args = parser.parse_args()
 
 stub(globals())
@@ -92,10 +93,11 @@ run_experiment_lite(
     snapshot_mode="last",
     # Specifies the seed for the experiment. If this is not provided, a random seed
     # will be used
-    exp_prefix="UnifiedDDPG",
+    exp_prefix="UnifiedDDPG_" + args.env + "_" + args.type,
     seed=1,
     mode="ec2" if args.use_ec2 else "local",
     plot=False,
     # dry=True,
+    terminate_machine=args.dont_terminate_machine,
     added_project_directories=[osp.abspath(osp.join(osp.dirname(__file__), '.'))]
 )
