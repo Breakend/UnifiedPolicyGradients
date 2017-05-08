@@ -9,6 +9,8 @@ from rllab.misc import ext
 import rllab.misc.logger as logger
 #import pickle as pickle
 import numpy as np
+import time
+import gc
 import pyprind
 import tensorflow as tf
 from tensorflow.contrib.distributions import Bernoulli
@@ -18,8 +20,6 @@ from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimize
 #from sandbox.rocky.tf.core.parameterized import suppress_params_loading
 from rllab.core.serializable import Serializable
 from sampling_utils import SimpleReplayPool
-
-USE_GATED_SIGMA = True
 
 class DDPG(RLAlgorithm):
     """
@@ -54,7 +54,8 @@ class DDPG(RLAlgorithm):
             scale_reward=1.0,
             include_horizon_terminal_transitions=False,
             plot=False,
-            pause_for_plot=False):
+            pause_for_plot=False,
+            **kwargs):
         """
         :param env: Environment
         :param policy: Policy
@@ -126,7 +127,7 @@ class DDPG(RLAlgorithm):
         self.es_path_returns = []
         self.paths_samples_cnt = 0
         self.random_dist = Bernoulli(probs=[.5])
-
+        self.use_gated_sigma = kwargs.get('use_gated_sigma', True)
 
         self.scale_reward = scale_reward
 
@@ -141,6 +142,7 @@ class DDPG(RLAlgorithm):
 
     @overrides
     def train(self):
+        gc_dump_time = time.time()
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             # This seems like a rather sequential method
@@ -257,6 +259,9 @@ class DDPG(RLAlgorithm):
                         sample_policy.set_param_values(self.policy.get_param_values())
 
                     itr += 1
+                    if time.time() - gc_dump_time > 100:
+                        gc.collect()
+                        gc_dump_time = time.time()
 
                 logger.log("Training finished")
                 logger.log("Trained qf %d steps, policy %d steps"%(train_qf_itr, train_policy_itr))
@@ -363,7 +368,7 @@ class DDPG(RLAlgorithm):
         policy_surr_off = -tf.reduce_mean(policy_qval_off)
 
 
-        if USE_GATED_SIGMA:
+        if self.use_gated_sigma:
 
             input_to_gates= tf.concat([obs, obs_offpolicy], axis=1)
 
@@ -379,7 +384,7 @@ class DDPG(RLAlgorithm):
                               input_shape=tuple(input_to_gates.get_shape().as_list()[1:])).output
         else:
             # sample a bernoulli random variable
-            gating_func = self.random_dist.sample(qf_loss.get_shape())
+            gating_func = tf.cast(self.random_dist.sample(qf_loss.get_shape()), tf.float32)
 
         qf_inputs_list = [yvar, obs, action, yvar_offpolicy, obs_offpolicy, action_offpolicy]
         qf_reg_loss = qf_loss*gating_func + qf_loss_off * (1-gating_func) + qf_weight_decay_term

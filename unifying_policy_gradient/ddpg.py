@@ -10,6 +10,8 @@ import rllab.misc.logger as logger
 #import pickle as pickle
 import numpy as np
 import pyprind
+import time
+import gc
 import tensorflow as tf
 from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimizer
 #from sandbox.rocky.tf.core.parameterized import suppress_params_loading
@@ -49,7 +51,8 @@ class DDPG(RLAlgorithm):
             scale_reward=1.0,
             include_horizon_terminal_transitions=False,
             plot=False,
-            pause_for_plot=False):
+            pause_for_plot=False,
+            **kwargs):
         """
         :param env: Environment
         :param policy: Policy
@@ -133,6 +136,7 @@ class DDPG(RLAlgorithm):
 
     @overrides
     def train(self):
+        gc_dump_time = time.time()
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             # This seems like a rather sequential method
@@ -205,6 +209,9 @@ class DDPG(RLAlgorithm):
                         sample_policy.set_param_values(self.policy.get_param_values())
 
                     itr += 1
+                    if time.time() - gc_dump_time > 100:
+                        gc.collect()
+                        gc_dump_time = time.time()
 
                 logger.log("Training finished")
                 logger.log("Trained qf %d steps, policy %d steps"%(train_qf_itr, train_policy_itr))
