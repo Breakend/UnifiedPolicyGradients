@@ -126,7 +126,7 @@ class DDPG(RLAlgorithm):
         self.paths = []
         self.es_path_returns = []
         self.paths_samples_cnt = 0
-        self.random_dist = Bernoulli(probs=[.5])
+        self.random_dist = Bernoulli(None, [.5])
         self.use_gated_sigma = kwargs.get('use_gated_sigma', True)
 
         self.scale_reward = scale_reward
