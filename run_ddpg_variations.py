@@ -17,10 +17,11 @@ import tensorflow as tf
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("type", help="Type of DDPG to run: unified, unified-gated, regular")
+parser.add_argument("type", help="Type of DDPG to run: ['unified-decaying', 'unified-gated-decaying', 'unified', 'unified-gated', 'regular']")
 parser.add_argument("env", help="The environment name from OpenAIGym environments")
 parser.add_argument("--num_epochs", default=100, type=int)
 parser.add_argument("--data_dir", default="./data/")
+parser.add_argument("--reward_scale", default=1.0, type=float)
 parser.add_argument("--use_ec2", action="store_true", help="Use your ec2 instances if configured")
 parser.add_argument("--dont_terminate_machine", action="store_false", help="Whether to terminate your spot instance or not. Be careful.")
 args = parser.parse_args()
@@ -58,7 +59,7 @@ qf = ContinuousMLPQFunction(env_spec=env.spec,
                             hidden_nonlinearity=tf.nn.relu,)
 
 
-ddpg_type_map = {"unified" : UnifiedDDPG, "unified-gated" : UnifiedDDPG, "regular" : RegularDDPG}
+ddpg_type_map = {"unified" : UnifiedDDPG, "unified-gated" : UnifiedDDPG, "regular" : RegularDDPG, "unified-decaying" : UnifiedDDPG, "unified-gated-decaying" : UnifiedDDPG}
 
 
 ddpg_class = ddpg_type_map[args.type]
@@ -76,11 +77,11 @@ algo = ddpg_class(
     min_pool_size=10000,
     n_epochs=args.num_epochs,
     discount=0.99,
-    scale_reward=1.0,
+    scale_reward=args.reward_scale,
     qf_learning_rate=1e-3,
     policy_learning_rate=1e-4,
     plot=False,
-    use_gated_sigma = True if args.type == "unified-gated" else False
+    sigma_type=args.type
 )
 
 

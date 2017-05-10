@@ -9,12 +9,13 @@ from numpy import genfromtxt
 
 
 
-def single_plot(average_vals, std_dev, env_name, smoothing_window=5, no_show=False):
+def single_plot(average_vals, std_dev, env_name, smoothing_window=5, no_show=False, ignore_std=False):
     fig = plt.figure(figsize=(15, 10))
     rewards_smoothed_1 = pd.Series(average_vals).rolling(smoothing_window, min_periods=smoothing_window).mean()
 
     cum_rwd_1, = plt.plot(range(len(average_vals)), rewards_smoothed_1, label="Unified On-Policy and Off-Policy DDPG")
-    plt.fill_between(range(len(average_vals)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor='blue')
+    if not ignore_std:
+        plt.fill_between(range(len(average_vals)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor='blue')
 
     plt.legend(handles=[cum_rwd_1])
     plt.xlabel("Epsiode")
@@ -29,7 +30,7 @@ def single_plot(average_vals, std_dev, env_name, smoothing_window=5, no_show=Fal
     return fig
 
 
-def multiple_plot(average_vals_list, std_dev_list, other_labels, env_name, smoothing_window=5, no_show=False):
+def multiple_plot(average_vals_list, std_dev_list, other_labels, env_name, smoothing_window=5, no_show=False, ignore_std=False):
     fig = plt.figure(figsize=(15, 10))
     colors = cycle(["aqua", "black", "blue", "fuchsia", "gray", "green", "lime", "maroon", "navy", "olive", "purple", "red", "silver", "teal", "yellow"])
 
@@ -37,7 +38,8 @@ def multiple_plot(average_vals_list, std_dev_list, other_labels, env_name, smoot
         rewards_smoothed_1 = pd.Series(average_vals).rolling(smoothing_window, min_periods=smoothing_window).mean()
 
         cum_rwd_1, = plt.plot(range(len(average_vals)), rewards_smoothed_1, label=label)
-        plt.fill_between(range(len(average_vals)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor=next(colors))
+        if not ignore_std:
+            plt.fill_between(range(len(average_vals)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor=next(colors))
 
     plt.legend(loc='lower right')
     plt.xlabel("Epsiode")
@@ -84,8 +86,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("path_to_progress_csv")
 parser.add_argument("env_name")
 parser.add_argument("--save", action="store_true")
+parser.add_argument("--ignore_std", action="store_true")
 parser.add_argument('--other_paths', nargs='+', help='List of other progress csv files', required=False)
 parser.add_argument('--labels', nargs='+', help='List of labels to go along with the paths', required=False)
+parser.add_argument('--smoothing_window', default=5, type=int)
 
 args = parser.parse_args()
 
@@ -105,6 +109,6 @@ if args.other_paths:
         std_dev_ret = np.array(data["StdReturn"])
         avg_rets.append(avg_ret)
         std_dev_rets.append(std_dev_ret)
-    multiple_plot(avg_rets, std_dev_rets, args.labels, args.env_name, no_show=args.save)
+    multiple_plot(avg_rets, std_dev_rets, args.labels, args.env_name, smoothing_window=args.smoothing_window, no_show=args.save, ignore_std=args.ignore_std)
 else:
-    single_plot(avg_ret, std_dev_ret, args.env_name, no_show=args.save)
+    single_plot(avg_ret, std_dev_ret, args.env_name, no_show=args.save, smoothing_window=args.smoothing_window, ignore_std=args.ignore_std)

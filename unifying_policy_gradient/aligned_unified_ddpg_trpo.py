@@ -98,6 +98,7 @@ class DDPG(RLAlgorithm):
         self.discount = discount
         self.max_path_length = max_path_length
         self.qf_weight_decay = qf_weight_decay
+        # TODO: replace optimizers with conjugate gradient optimizers with leq constraint as in TRPO
         self.qf_update_method = \
             FirstOrderOptimizer(
                 update_method=qf_update_method,
@@ -113,9 +114,6 @@ class DDPG(RLAlgorithm):
         self.policy_learning_rate = policy_learning_rate
         self.policy_updates_ratio = policy_updates_ratio
         self.eval_samples = eval_samples
-        self.train_step = tf.placeholder(tf.float32, shape=(), name="train_step")
-        self.global_train_step = 0.0
-
         self.soft_target_tau = soft_target_tau
         self.n_updates_per_sample = n_updates_per_sample
         self.include_horizon_terminal_transitions = include_horizon_terminal_transitions
@@ -130,7 +128,7 @@ class DDPG(RLAlgorithm):
         self.es_path_returns = []
         self.paths_samples_cnt = 0
         self.random_dist = Bernoulli(None, [.5])
-        self.sigma_type = kwargs.get('sigma_type', 'gated')
+        self.use_gated_sigma = kwargs.get('use_gated_sigma', True)
 
         self.scale_reward = scale_reward
 
@@ -252,7 +250,6 @@ class DDPG(RLAlgorithm):
                     observation = next_observation
 
                     if pool.size >= self.min_pool_size:
-                        self.global_train_step += 1
                         for update_itr in range(self.n_updates_per_sample):
                             # Train policy
                             batch = pool.random_batch(self.batch_size)
@@ -372,7 +369,7 @@ class DDPG(RLAlgorithm):
         policy_surr_off = -tf.reduce_mean(policy_qval_off)
 
 
-        if self.sigma_type == 'unified-gated' or self.sigma_type == 'unified-gated-decaying':
+        if self.use_gated_sigma:
             print("Using Gated Sigma!")
 
             input_to_gates= tf.concat([obs, obs_offpolicy], axis=1)
@@ -387,28 +384,17 @@ class DDPG(RLAlgorithm):
                               output_nonlinearity=tf.nn.sigmoid,
                               input_var=input_to_gates,
                               input_shape=tuple(input_to_gates.get_shape().as_list()[1:])).output
-        elif self.sigma_type == 'unified':
+        else:
             # sample a bernoulli random variable
             print("Using Bernoulli sigma!")
             gating_func = tf.cast(self.random_dist.sample(qf_loss.get_shape()), tf.float32)
-        elif self.sigma_type == 'unified-decaying':
-            print("Using decaying sigma!")
-            gating_func = tf.train.exponential_decay(1.0, self.train_step, 20, 0.96, staircase=True)
-        else:
-            raise Exception("sigma type not supported")
 
-        qf_inputs_list = [yvar, obs, action, yvar_offpolicy, obs_offpolicy, action_offpolicy, self.train_step]
-        qf_reg_loss = qf_loss*(1.0-gating_func) + qf_loss_off * (gating_func) + qf_weight_decay_term
+        qf_inputs_list = [yvar, obs, action, yvar_offpolicy, obs_offpolicy, action_offpolicy]
+        qf_reg_loss = qf_loss*gating_func + qf_loss_off * (1-gating_func) + qf_weight_decay_term
 
-        policy_input_list = [obs, obs_offpolicy, self.train_step]
-        policy_reg_surr = policy_surr*(1.0 - gating_func) + policy_surr_off*(gating_func) + policy_weight_decay_term
+        policy_input_list = [obs, obs_offpolicy]
+        policy_reg_surr = policy_surr*gating_func + policy_surr_off*(1-gating_func) + policy_weight_decay_term
 
-        if self.sigma_type == 'unified-gated-decaying':
-            print("Adding a decaying factor to gated sigma!")
-            decaying_factor = tf.train.exponential_decay(.5, self.train_step, 20, 0.96, staircase=True)
-            penalty = decaying_factor*tf.nn.l2_loss(gating_func)
-            qf_reg_loss += penalty
-            policy_reg_surr += penalty
 
         self.qf_update_method.update_opt(qf_reg_loss, target=self.qf, inputs=qf_inputs_list)
 
@@ -463,7 +449,7 @@ class DDPG(RLAlgorithm):
         f_train_qf = self.opt_info["f_train_qf"]
         f_train_policy = self.opt_info["f_train_policy"]
 
-        qf_loss, qval, _ = f_train_qf(ys, obs, actions, ys_off, obs_off, actions_off, self.global_train_step)
+        qf_loss, qval, _ = f_train_qf(ys, obs, actions, ys_off, obs_off, actions_off)
 
         target_qf.set_param_values(
             target_qf.get_param_values() * (1.0 - self.soft_target_tau) +
@@ -476,7 +462,7 @@ class DDPG(RLAlgorithm):
         train_policy_itr = 0
         while self.train_policy_itr > 0:
             f_train_policy = self.opt_info["f_train_policy"]
-            policy_surr, _ = f_train_policy(obs, obs_off, self.global_train_step)
+            policy_surr, _ = f_train_policy(obs, obs_off)
             target_policy.set_param_values(
                 target_policy.get_param_values() * (1.0 - self.soft_target_tau) +
                 self.policy.get_param_values() * self.soft_target_tau)
