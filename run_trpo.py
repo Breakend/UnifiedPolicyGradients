@@ -1,15 +1,16 @@
-from unifying_policy_gradient.aligned_unified_ddpg import DDPG as UnifiedDDPG
-from unifying_policy_gradient.ddpg import DDPG as RegularDDPG
 from rllab.envs.box2d.cartpole_env import CartpoleEnv
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import stub, run_experiment_lite
-from rllab.exploration_strategies.ou_strategy import OUStrategy
-from sandbox.rocky.tf.policies.deterministic_mlp_policy import DeterministicMLPPolicy
-from sandbox.rocky.tf.q_functions.continuous_mlp_q_function import ContinuousMLPQFunction
+from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
+from rllab.envs.gym_env import GymEnv
 
 from sandbox.rocky.tf.envs.base import TfEnv
-from rllab.envs.gym_env import GymEnv
+from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
+from sandbox.rocky.tf.algos.trpo import TRPO
 from rllab.misc import ext
+from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
+from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDifferenceHvp
+
 import pickle
 import os.path as osp
 
@@ -17,11 +18,10 @@ import tensorflow as tf
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("type", help="Type of DDPG to run: ['unified-decaying', 'unified-gated-decaying', 'unified', 'unified-gated', 'regular']")
+# parser.add_argument("type", help="Type of DDPG to run: ['unified-decaying', 'unified-gated-decaying', 'unified', 'unified-gated', 'regular']")
 parser.add_argument("env", help="The environment name from OpenAIGym environments")
 parser.add_argument("--num_epochs", default=100, type=int)
 parser.add_argument("--data_dir", default="./data/")
-parser.add_argument("--reward_scale", default=1.0, type=float)
 parser.add_argument("--use_ec2", action="store_true", help="Use your ec2 instances if configured")
 parser.add_argument("--dont_terminate_machine", action="store_false", help="Whether to terminate your spot instance or not. Be careful.")
 args = parser.parse_args()
@@ -44,46 +44,28 @@ else:
 
 env = TfEnv(normalize(gymenv))
 
-policy = DeterministicMLPPolicy(
-    env_spec=env.spec,
-    name="policy",
-    # The neural network policy should have two hidden layers, each with 32 hidden units.
-    hidden_sizes=(100, 50, 25),
-    hidden_nonlinearity=tf.nn.relu,
+
+policy = GaussianMLPPolicy(
+name="policy",
+env_spec=env.spec,
+# The neural network policy should have two hidden layers, each with 32 hidden units.
+hidden_sizes=(100, 50, 25),
+hidden_nonlinearity=tf.nn.relu,
 )
 
-es = OUStrategy(env_spec=env.spec)
+baseline = LinearFeatureBaseline(env_spec=env.spec)
 
-qf = ContinuousMLPQFunction(env_spec=env.spec,
-                            hidden_sizes=(100,100),
-                            hidden_nonlinearity=tf.nn.relu,)
-
-
-ddpg_type_map = {"unified" : UnifiedDDPG, "unified-gated" : UnifiedDDPG, "regular" : RegularDDPG, "unified-decaying" : UnifiedDDPG, "unified-gated-decaying" : UnifiedDDPG}
-
-
-ddpg_class = ddpg_type_map[args.type]
-
-# n_itr = int(np.ceil(float(n_episodes*max_path_length)/flags['batch_size']))
-
-algo = ddpg_class(
+algo = TRPO(
     env=env,
     policy=policy,
-    es=es,
-    qf=qf,
-    batch_size=64,
+    baseline=baseline,
+    batch_size=5000,
     max_path_length=env.horizon,
-    epoch_length=1000,
-    min_pool_size=10000,
-    n_epochs=args.num_epochs,
+    n_itr=args.num_epochs,
     discount=0.99,
-    scale_reward=args.reward_scale,
-    qf_learning_rate=1e-3,
-    policy_learning_rate=1e-4,
-    plot=False,
-    sigma_type=args.type
+    step_size=0.01,
+    optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
 )
-
 
 run_experiment_lite(
     algo.train(),
@@ -94,7 +76,7 @@ run_experiment_lite(
     snapshot_mode="last",
     # Specifies the seed for the experiment. If this is not provided, a random seed
     # will be used
-    exp_prefix="UnifiedDDPG_" + args.env + "_" + args.type,
+    exp_prefix="UnifiedDDPG_" + args.env + "_trpo",
     seed=1,
     mode="ec2" if args.use_ec2 else "local",
     plot=False,

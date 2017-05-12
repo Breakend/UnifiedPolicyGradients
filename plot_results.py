@@ -11,11 +11,11 @@ from numpy import genfromtxt
 
 def single_plot(average_vals, std_dev, env_name, smoothing_window=5, no_show=False, ignore_std=False):
     fig = plt.figure(figsize=(15, 10))
-    rewards_smoothed_1 = pd.Series(average_vals).rolling(smoothing_window, min_periods=smoothing_window).mean()
+    rewards_smoothed_1 = pd.Series(average_vals).rolling(smoothing_window, min_periods=smoothing_window).mean()#[:200]
 
-    cum_rwd_1, = plt.plot(range(len(average_vals)), rewards_smoothed_1, label="Unified On-Policy and Off-Policy DDPG")
+    cum_rwd_1, = plt.plot(range(len(rewards_smoothed_1)), rewards_smoothed_1, label="Unified On-Policy and Off-Policy DDPG")
     if not ignore_std:
-        plt.fill_between(range(len(average_vals)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor='blue')
+        plt.fill_between(range(len(rewards_smoothed_1)), rewards_smoothed_1 + std_dev,   rewards_smoothed_1 - std_dev, alpha=0.3, edgecolor='blue', facecolor='blue')
 
     plt.legend(handles=[cum_rwd_1])
     plt.xlabel("Epsiode")
